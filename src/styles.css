@@ -49,6 +49,13 @@ body {
 .login-form label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
 .login-form input { padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; }
 .login-form input:focus { outline: none; border-color: var(--accent); }
+
+/* username + fixed @domain suffix */
+.email-field { display: flex; align-items: stretch; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; transition: border-color 0.12s ease; }
+.email-field:focus-within { border-color: var(--accent); }
+.email-field input { flex: 1; border: none; border-radius: 0; padding: 11px 13px; min-width: 0; }
+.email-field input:focus { outline: none; }
+.email-suffix { display: flex; align-items: center; padding: 0 13px; background: #f0eee8; color: var(--muted); font-size: 15px; font-weight: 600; white-space: nowrap; border-left: 1.5px solid var(--line); user-select: none; }
 .login-error { background: #fbeae6; color: var(--fail); border: 1px solid #e6b5a8; border-radius: 8px; padding: 9px 12px; font-size: 13px; }
 
 /* ---- progress summary ---- */

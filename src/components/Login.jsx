@@ -3,15 +3,24 @@ import { useAuth } from '../lib/auth'
 
 export default function Login() {
   const { sendCode, verifyCode, needsCode, allowedDomain, mode } = useAuth()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [code, setCode] = useState('')
   const [stage, setStage] = useState('email') // email | code
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  const email = `${username}@${allowedDomain}`
+
+  // Keep only the local part: strip spaces and anything from an '@' onward.
+  function onUsernameChange(e) {
+    const v = e.target.value.split('@')[0].replace(/\s/g, '')
+    setUsername(v)
+  }
+
   async function handleEmail(e) {
     e.preventDefault()
     setError(null)
+    if (!username) return setError('Enter your username.')
     setBusy(true)
     const res = await sendCode(email)
     setBusy(false)
@@ -34,22 +43,30 @@ export default function Login() {
       <div className="badge">Sign in</div>
       <h1>Claude Architect · Practice Exam</h1>
       <p className="muted">
-        Enter your <strong>@{allowedDomain}</strong> email to continue. Your email is your profile —
-        results and progress are saved under it. No password required.
+        Enter your <strong>@{allowedDomain}</strong> username to continue. Your email is your profile
+        — results and progress are saved under it. No password required.
       </p>
 
       {stage === 'email' && (
         <form onSubmit={handleEmail} className="login-form">
           <label>
             Work email
-            <input
-              type="email"
-              autoFocus
-              placeholder={`you@${allowedDomain}`}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <div className="email-field">
+              <input
+                type="text"
+                autoFocus
+                placeholder="you"
+                value={username}
+                onChange={onUsernameChange}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck="false"
+                required
+              />
+              <span className="email-suffix" aria-hidden="true">
+                @{allowedDomain}
+              </span>
+            </div>
           </label>
           {error && <div className="login-error">{error}</div>}
           <button className="btn primary big" disabled={busy}>
