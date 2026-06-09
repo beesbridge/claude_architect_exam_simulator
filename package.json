@@ -6,15 +6,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "node server/local-server.mjs",
+    "dev:local": "concurrently -k -n api,web -c blue,green \"npm:api\" \"npm:dev\"",
     "build": "vite build",
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "better-sqlite3": "^11.3.0",
+    "concurrently": "^9.0.1",
     "vite": "^5.4.2"
   }
 }

@@ -1,5 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import examData from './resources/questions.json'
+import { AuthProvider, useAuth } from './lib/auth'
+import Login from './components/Login'
+import {
+  saveAttempt,
+  loadAnswerHistory,
+  loadAttemptCount,
+  buildStats,
+  makeWeightFn,
+  summarize
+} from './lib/history'
 
 const { examMeta, scenarios, questions } = examData
 
@@ -33,26 +43,45 @@ function totalAvailable() {
   )
 }
 
+// Draw one item from `pool` with probability proportional to weightFn(item),
+// remove it from the pool, and return it. Falls back to uniform if all zero.
+function drawWeighted(pool, weightFn) {
+  if (pool.length === 0) return null
+  const weights = pool.map((q) => Math.max(0, weightFn(q.id)) || 0)
+  let total = weights.reduce((a, b) => a + b, 0)
+  let idx
+  if (total <= 0) {
+    idx = Math.floor(Math.random() * pool.length)
+  } else {
+    let r = Math.random() * total
+    idx = weights.findIndex((w) => (r -= w) < 0)
+    if (idx < 0) idx = pool.length - 1
+  }
+  return pool.splice(idx, 1)[0]
+}
+
 // Build one exam form: pick up to N scenarios at random, then sample `limit`
-// questions spread evenly across them (round-robin). limit == null => all.
-function buildExam(scenarioCount, limit) {
+// questions spread evenly across them (round-robin). Within each scenario,
+// questions are drawn with weighting (failed/unseen far more likely).
+// limit == null => all. weightFn defaults to uniform.
+function buildExam(scenarioCount, limit, weightFn = () => 1) {
   const eligible = scenariosWithQuestions()
   const picked = shuffle(eligible).slice(0, Math.min(scenarioCount, eligible.length))
-  // Shuffled question pool per scenario.
-  const pools = picked.map((s) => shuffle(questions.filter((q) => q.scenarioId === s.id)))
+  // Mutable per-scenario pools we draw from.
+  const pools = picked.map((s) => questions.filter((q) => q.scenarioId === s.id).slice())
   const selected = pools.map(() => [])
 
   const totalInPicked = pools.reduce((acc, p) => acc + p.length, 0)
   const target = limit == null ? totalInPicked : Math.min(limit, totalInPicked)
 
-  // Round-robin draw so every chosen scenario is represented.
+  // Round-robin across scenarios so each is represented; weighted draw within.
   let count = 0
   let progress = true
   while (count < target && progress) {
     progress = false
     for (let i = 0; i < pools.length && count < target; i++) {
-      if (selected[i].length < pools[i].length) {
-        selected[i].push(pools[i][selected[i].length])
+      if (pools[i].length > 0) {
+        selected[i].push(drawWeighted(pools[i], weightFn))
         count++
         progress = true
       }
@@ -114,7 +143,7 @@ function fmtTime(secs) {
 
 // ----- screens -----------------------------------------------------------
 
-function StartScreen({ onStart }) {
+function StartScreen({ onStart, progress }) {
   const eligible = scenariosWithQuestions()
   const maxQuestions = totalAvailable()
   const presets = [10, 20, 30, 50].filter((n) => n < maxQuestions)
@@ -146,6 +175,33 @@ function StartScreen({ onStart }) {
       </div>
 
       <p className="format">{examMeta.format}</p>
+
+      {progress && progress.seen > 0 && (
+        <div className="progress-summary">
+          <h3>Your progress</h3>
+          <div className="progress-grid">
+            <div>
+              <span className="info-num">{progress.attempts}</span>
+              <span className="info-label">Exams taken</span>
+            </div>
+            <div>
+              <span className="info-num">{progress.seen}/{progress.total}</span>
+              <span className="info-label">Questions seen</span>
+            </div>
+            <div>
+              <span className="info-num">{progress.toReview}</span>
+              <span className="info-label">To review</span>
+            </div>
+            <div>
+              <span className="info-num">{progress.mastered}</span>
+              <span className="info-label">Mastered</span>
+            </div>
+          </div>
+          <p className="muted small">
+            Failed and unseen questions are weighted to appear more often until you master them.
+          </p>
+        </div>
+      )}
 
       <div className="domains">
         <h3>Scored domains</h3>
@@ -447,28 +503,51 @@ function ResultsScreen({ exam, answers, autoSubmitted, onRestart }) {
   )
 }
 
-// ----- root --------------------------------------------------------------
+// ----- exam app (authenticated / local) ----------------------------------
 
-export default function App() {
+function ExamApp() {
+  const { email, user, signOut } = useAuth()
   const [phase, setPhase] = useState('start') // start | exam | results
   const [exam, setExam] = useState(null)
   const [config, setConfig] = useState({ timed: true, minutes: 90, count: 20 })
   const [answers, setAnswers] = useState({})
   const [autoSubmitted, setAutoSubmitted] = useState(false)
+  const [stats, setStats] = useState({})
+  const [progress, setProgress] = useState(null)
+
+  // Load this user's history → per-question stats for weighting + summary.
+  async function refreshHistory() {
+    if (!user) return
+    const rows = await loadAnswerHistory(user)
+    const s = buildStats(rows)
+    setStats(s)
+    const attempts = await loadAttemptCount(user)
+    setProgress({ ...summarize(s, questions), attempts })
+  }
+
+  useEffect(() => {
+    refreshHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.email])
 
   function start(cfg) {
     setConfig(cfg)
-    setExam(buildExam(examMeta.scenariosPerExam, cfg.count))
+    setExam(buildExam(examMeta.scenariosPerExam, cfg.count, makeWeightFn(stats)))
     setAnswers({})
     setAutoSubmitted(false)
     setPhase('exam')
   }
 
-  function submit(finalAnswers, auto) {
+  async function submit(finalAnswers, auto) {
     setAnswers(finalAnswers)
     setAutoSubmitted(auto)
     setPhase('results')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (user && exam) {
+      const result = scoreExam(exam.questions, finalAnswers)
+      await saveAttempt({ user, exam, answers: finalAnswers, result, config, autoSubmitted: auto })
+      refreshHistory()
+    }
   }
 
   function restart() {
@@ -482,9 +561,17 @@ export default function App() {
       <header className="topbar">
         <span className="logo">ANTHROP\C</span>
         <span className="topbar-title">Architect · Foundations — Practice Exam</span>
+        {email && (
+          <span className="topbar-user">
+            {email}
+            <button className="btn link signout" onClick={signOut}>
+              Sign out
+            </button>
+          </span>
+        )}
       </header>
       <div className="container">
-        {phase === 'start' && <StartScreen onStart={start} />}
+        {phase === 'start' && <StartScreen onStart={start} progress={progress} />}
         {phase === 'exam' && exam && (
           <ExamScreen exam={exam} config={config} onSubmit={submit} />
         )}
@@ -498,5 +585,43 @@ export default function App() {
         )}
       </div>
     </div>
+  )
+}
+
+// ----- root: auth gate ----------------------------------------------------
+
+function Gate() {
+  const { loading, user } = useAuth()
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="container">
+          <div className="card loading-card">Loading…</div>
+        </div>
+      </div>
+    )
+  }
+  // Always require the front-end email gate before using the app.
+  if (!user) {
+    return (
+      <div className="app">
+        <header className="topbar">
+          <span className="logo">ANTHROP\C</span>
+          <span className="topbar-title">Architect · Foundations — Practice Exam</span>
+        </header>
+        <div className="container">
+          <Login />
+        </div>
+      </div>
+    )
+  }
+  return <ExamApp />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   )
 }

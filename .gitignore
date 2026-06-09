@@ -1,4 +1,19 @@
 node_modules
+node_modules_test
 dist
 .DS_Store
 *.log
+
+# Local backend SQLite database (never commit)
+server/data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.idea

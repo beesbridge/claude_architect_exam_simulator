@@ -1,22 +1,32 @@
 # Claude Certified Architect – Foundations · Practice Exam Simulator
 # Usage:
-#   make server   -> ensure deps are healthy, then start the dev server
+#   make server   -> run locally (Vite + local SQLite API) on http://localhost:5173
+#   make web      -> run only the Vite front-end (no local backend)
 #   make install  -> install node dependencies
 #   make reset    -> remove node_modules + lockfile and reinstall cleanly
-#   make build    -> production build into ./dist
+#   make build    -> production build into ./dist (for Vercel)
 #   make preview  -> serve the production build
-#   make clean    -> remove node_modules, lockfile, dist, and vite temp files
+#   make clean    -> remove node_modules, lockfile, dist, vite temp files
+#   make clean-db -> delete the local SQLite database
 
-.PHONY: server install reset build preview clean
+.PHONY: server web install reset build preview clean clean-db
 
-# Start the dev server. If the rollup native binary is missing (a known npm
-# optional-dependency bug, common after copying/moving node_modules), do a
-# clean reinstall automatically before starting.
+# Local development: front-end + local SQLite-backed API together.
+# Reinstalls if deps are missing/broken (incl. the npm rollup optional-dep bug,
+# or a stale node_modules that predates the backend dependencies).
 server:
-	@if [ ! -d node_modules ] || ! ls node_modules/@rollup/rollup-* >/dev/null 2>&1; then \
-		echo ">> Dependencies missing or broken - running a clean reinstall..."; \
+	@if [ ! -d node_modules ] \
+		|| ! ls node_modules/@rollup/rollup-* >/dev/null 2>&1 \
+		|| [ ! -d node_modules/better-sqlite3 ] \
+		|| [ ! -d node_modules/concurrently ] \
+		|| [ ! -d node_modules/@supabase ]; then \
+		echo ">> Dependencies missing or out of date - running a clean reinstall..."; \
 		$(MAKE) reset; \
 	fi
+	npm run dev:local
+
+web:
+	@if [ ! -d node_modules ]; then $(MAKE) install; fi
 	npm run dev
 
 install:
@@ -36,3 +46,6 @@ preview: build
 
 clean:
 	rm -rf node_modules package-lock.json dist vite.config.js.timestamp-*.mjs
+
+clean-db:
+	rm -rf server/data

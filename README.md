@@ -7,22 +7,36 @@ multiple-choice questions, random scenario selection, a timer, and domain-weight
 ## Run it
 
 ```bash
-make server     # installs dependencies on first run, then starts the dev server
+make server     # front-end + local SQLite backend on http://localhost:5173
 ```
 
-Then open the URL Vite prints (defaults to http://localhost:5173 — it also opens automatically).
+On first run it installs dependencies (including a one-time native build of `better-sqlite3`),
+then starts both the Vite app and a local API. Sign in with any `@beesbridge.us` email — in local
+mode no code is required. Your results are saved to a local SQLite file (`server/data/exam.db`,
+gitignored).
 
 Other targets:
 
 ```bash
+make web        # front-end only, no backend (local-only, nothing saved)
 make install    # install node dependencies
 make reset      # clean reinstall (fixes the npm rollup optional-dependency bug)
-make build      # production build into ./dist
+make build      # production build into ./dist (for Vercel)
 make preview    # serve the production build
 make clean      # remove node_modules, lockfile, and dist
+make clean-db   # delete the local SQLite database
 ```
 
 Requires Node.js 18+ and npm.
+
+## Accounts, saved history & hosting
+
+The same app runs **locally on SQLite** (`make server`) or **hosted on Vercel + Supabase**
+(Postgres). In both modes, sign-in is restricted to **@beesbridge.us** emails, the email is the
+profile id, results are saved per user, and future exams **weight failed/unseen questions much more
+heavily** (spaced repetition). The mode is chosen automatically from environment variables.
+
+See **[DEPLOY.md](DEPLOY.md)** for full Supabase setup and Vercel deployment steps.
 
 ## How the simulation works
 
