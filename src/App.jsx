@@ -8,7 +8,8 @@ import {
   loadAttemptCount,
   buildStats,
   makeWeightFn,
-  summarize
+  summarize,
+  domainPerformance
 } from './lib/history'
 
 const { examMeta, scenarios, questions } = examData
@@ -94,6 +95,19 @@ function buildExam(scenarioCount, limit, weightFn = () => 1) {
   return { scenarios: picked, questions: flat }
 }
 
+// Build a review session from questions the user last answered incorrectly.
+// Grouped by scenario (like a normal exam), order shuffled within each block.
+function buildReviewExam(stats) {
+  const missed = questions.filter((q) => stats[q.id]?.lastCorrect === false)
+  const scenarioIds = [...new Set(missed.map((q) => q.scenarioId))]
+  const picked = shuffle(scenarioIds).map((id) => SCENARIO_BY_ID[id])
+  const flat = []
+  picked.forEach((s) => {
+    shuffle(missed.filter((q) => q.scenarioId === s.id)).forEach((q) => flat.push(q))
+  })
+  return { scenarios: picked, questions: flat, review: true }
+}
+
 // Domain-weighted scaled score (approximation of the real exam's SME-set standard).
 function scoreExam(examQuestions, answers) {
   const perDomain = {}
@@ -152,6 +166,7 @@ function StartScreen({ onStart, progress }) {
   const [timed, setTimed] = useState(true)
 
   const examSize = count == null ? maxQuestions : Math.min(count, maxQuestions)
+  const hasPerf = progress && progress.seen > 0 && progress.domainPerf
 
   return (
     <div className="card start">
@@ -200,17 +215,50 @@ function StartScreen({ onStart, progress }) {
           <p className="muted small">
             Failed and unseen questions are weighted to appear more often until you master them.
           </p>
+          {progress.toReview > 0 && (
+            <button
+              className="btn review-btn full"
+              onClick={() => onStart({ review: true, timed: false, minutes: 90, count: null })}
+            >
+              ↻ Review {progress.toReview} missed question{progress.toReview === 1 ? '' : 's'}
+            </button>
+          )}
         </div>
       )}
 
       <div className="domains">
-        <h3>Scored domains</h3>
-        {DOMAINS.map((d) => (
-          <div className="domain-row" key={d.id}>
-            <span className="domain-name">{d.name}</span>
-            <span className="domain-weight">{Math.round(d.weight * 100)}%</span>
-          </div>
-        ))}
+        <h3>Scored domains{hasPerf ? ' · your performance' : ''}</h3>
+        {DOMAINS.map((d) => {
+          const p = progress?.domainPerf?.[d.id]
+          return (
+            <div className="domain-block" key={d.id}>
+              <div className="domain-row">
+                <span className="domain-name">{d.name}</span>
+                <span className="domain-weight">
+                  {hasPerf && p && (
+                    <span className="muted small">
+                      {p.seen > 0 ? `${p.correct}/${p.seen} correct · ` : 'not seen · '}
+                    </span>
+                  )}
+                  weight {Math.round(d.weight * 100)}%
+                </span>
+              </div>
+              {hasPerf && p && p.seen > 0 && (
+                <div className="bar-track slim">
+                  <div
+                    className={`bar-fill ${p.pct >= 70 ? 'good' : p.pct >= 40 ? 'mid' : 'low'}`}
+                    style={{ width: `${p.pct}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {hasPerf && (
+          <p className="muted small">
+            Based on your latest answer to each question you have seen.
+          </p>
+        )}
       </div>
 
       <div className="count-config">
@@ -322,6 +370,7 @@ function ExamScreen({ exam, config, onSubmit }) {
       <main className="card exam-main">
         <div className="exam-header">
           <span className="qcount">
+            {exam.review && <span className="review-tag">↻ Review</span>}
             Question {idx + 1} of {exam.questions.length}
           </span>
           {config.timed && (
@@ -417,6 +466,7 @@ function ResultsScreen({ exam, answers, autoSubmitted, onRestart }) {
   return (
     <div className="results">
       <div className={`card score-card ${result.passed ? 'pass' : 'fail'}`}>
+        {exam.review && <div className="auto-note">↻ Review session — previously missed questions.</div>}
         {autoSubmitted && <div className="auto-note">⏱ Time expired — exam auto-submitted.</div>}
         <div className="score-num">{result.scaled}</div>
         <div className="score-scale">scaled score ({SCALE.min}–{SCALE.max})</div>
@@ -522,7 +572,11 @@ function ExamApp() {
     const s = buildStats(rows)
     setStats(s)
     const attempts = await loadAttemptCount(user)
-    setProgress({ ...summarize(s, questions), attempts })
+    setProgress({
+      ...summarize(s, questions),
+      attempts,
+      domainPerf: domainPerformance(s, questions)
+    })
   }
 
   useEffect(() => {
@@ -532,7 +586,11 @@ function ExamApp() {
 
   function start(cfg) {
     setConfig(cfg)
-    setExam(buildExam(examMeta.scenariosPerExam, cfg.count, makeWeightFn(stats)))
+    setExam(
+      cfg.review
+        ? buildReviewExam(stats)
+        : buildExam(examMeta.scenariosPerExam, cfg.count, makeWeightFn(stats))
+    )
     setAnswers({})
     setAutoSubmitted(false)
     setPhase('exam')

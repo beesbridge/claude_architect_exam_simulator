@@ -34,6 +34,27 @@ export function makeWeightFn(stats) {
   return (questionId) => weightForStats(stats[questionId])
 }
 
+// Per-domain performance based on the latest answer to each seen question.
+// Returns { [domainId]: { seen, total, correct, pct } }
+export function domainPerformance(stats, allQuestions) {
+  const perf = {}
+  for (const q of allQuestions) {
+    const p = perf[q.domainId] || { seen: 0, total: 0, correct: 0, pct: 0 }
+    p.total += 1
+    const s = stats[q.id]
+    if (s && s.seen > 0) {
+      p.seen += 1
+      if (s.lastCorrect) p.correct += 1
+    }
+    perf[q.domainId] = p
+  }
+  for (const d of Object.keys(perf)) {
+    const p = perf[d]
+    p.pct = p.seen > 0 ? Math.round((p.correct / p.seen) * 100) : 0
+  }
+  return perf
+}
+
 // Counts for the start-screen progress summary.
 export function summarize(stats, allQuestions) {
   let toReview = 0

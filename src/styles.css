@@ -141,6 +141,10 @@ h3 { margin: 0 0 12px; font-size: 16px; }
 }
 .domain-row:last-child { border-bottom: none; }
 .domain-weight { font-weight: 700; color: var(--accent-dark); }
+.domain-block { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.domain-block:last-of-type { border-bottom: none; }
+.domain-block .domain-row { border-bottom: none; padding-bottom: 4px; }
+.bar-track.slim { height: 6px; margin-bottom: 4px; }
 
 .count-config { margin: 22px 0 6px; }
 .count-presets { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -179,6 +183,18 @@ h3 { margin: 0 0 12px; font-size: 16px; }
 .btn.big { font-size: 16px; padding: 13px 26px; width: 100%; margin-top: 8px; }
 .btn.full { width: 100%; margin-top: 14px; }
 .btn.flag.active { background: #fbf3e6; border-color: var(--mid); color: #8a6d1f; }
+.btn.review-btn { background: #fdf1ec; border-color: var(--accent); color: var(--accent); }
+.btn.review-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.review-tag {
+  background: #fdf1ec;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
 
 /* ---- exam ---- */
 .exam-layout { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: start; }
